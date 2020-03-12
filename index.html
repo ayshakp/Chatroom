@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title> Online Chatroom</title>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="https://code.jquery.com/jquery-1.11.1.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/js-cookie@2/src/js.cookie.min.js"></script>
+    <link href="https://fonts.googleapis.com/css?family=Chivo:300,700|Playfair+Display:700i" rel="stylesheet">
+
+    <script>
+        $(document).ready(function() {
+
+        var socket = io();
+
+        socket.on('connect', function() {
+            if (Cookies.get('user')) {
+                var username = Cookies.get('user');
+                socket.emit('history', username);
+            }
+            else {
+                socket.emit('no history');
+            }
+        });
+
+        socket.on("create cookie", function(username){
+            Cookies.set('user', username);
+        });
+
+        socket.on('setup', function(user, chatlist, userlist) {
+            $('#usernametitle').text('Username: '+(user.username).toUpperCase());
+
+            refreshchat(chatlist);
+            	
+        });
+
+        socket.on('user list update', function(list) {
+            refreshusers(list);
+        });
+
+        $('form').submit(function(e) {
+            var message = $('#chatbox').val();
+
+            if (message.charAt(0) === '/'){
+                command(message);
+            }
+            else {
+                $('#chatbox').val('');
+                socket.emit('send', Cookies.get('user'), message);
+            }
+            return false;
+        });
+
+        socket.on('chat update', function(message, time, username, colour) {
+            messageformatting(message, time, username, colour);
+        });
+
+        socket.on('chat refresh', function (chat){
+            refreshchat(chat);
+        });
+
+        socket.on('nickname updated', function(nickname) {
+            Cookies.set('user', nickname);
+            $('#usernametitle').text('Username: '+(nickname.toUpperCase()));
+        });
+
+        socket.on('nickname unavail', function() {
+            showerror("Sorry, this username has already been taken.");
+        });
+
+        function command(command){
+
+            if (command.substr(0,11) === "/nickcolor "){
+                var colour = (command.substr(11)).trim();
+
+                if (colour.length === 0){
+                    showerror("/nickcolor [RRGGBB] is the command format to change your nickname.");
+                }
+                else if(checkcolour(colour)){
+                    $('#chatbox').val('');
+                    socket.emit('nickcolor', Cookies.get('user'), colour);
+                }
+                else{
+                    showerror("Please pick a valid colour value in the format [RRGGBB].");
+                }
+            }
+
+            else if (command.substr(0,6) === "/nick ") {
+                var nickname = (command.substr(6)).trim();
+
+                if (nickname.length > 10){
+                    showerror("Please pick a nickname that is at most 10 characters long.");
+                }
+                else if (nickname.length === 0){
+                    showerror("/nick [newnickname] is the command format to change your nickname.");
+                }
+                else if (nickname.search(" ") !== -1){
+                    showerror("Please pick a nickname with no spaces.");
+                }
+                else{
+                    $('#chatbox').val('');
+                    socket.emit('nick', Cookies.get('user'), nickname);
+                }
+            }
+
+            else if ((command.substr(0,6) === "/nick") || (command.substr(0,11) === "/nickcolor")){
+                showerror("Incorrect format, please note that command syntax is: /command [value].");
+            }
+            
+            else {
+                showerror("Command not found. Please not that the character '/' at the beginning of line is reserved for commands only.");
+            }
+
+        }
+
+        function refreshchat(chatlist){
+            $('#chatscreen').innerHTML = '';
+            for (let i=0; i<chatlist.length; i++) {
+                messageformatting(chatlist[i].message, chatlist[i].time, chatlist[i].username, chatlist[i].colour);
+            }
+            $("#chatscreen").animate({ scrollTop: 20000000 }, "slow");
+        }
+
+        function refreshusers(list){
+            $('#onlineuserslist').empty()
+            html = '';
+                for (var i=0; i < list.length; i++) {
+                    html += '<li>' + list[i].username + '</li>';
+                }
+            $('#onlineuserslist').append(html);
+            $('#onlineuserslist').scrollTop = $('#onlineuserslist').scrollHeight;	
+        }
+
+        function showerror(error){
+            var x = document.getElementById("snackbar");
+            x.innerHTML = error;
+            x.className = "show";
+            setTimeout(function(){ x.className = x.className.replace("show", ""); }, 3000);
+        }
+
+        function messageformatting(message, time, username, colour){
+            var timestamp = prettytimestamp(time);
+
+            var send = timestamp + " " + username.fontcolor(colour) + ": " + message;
+            if (username === Cookies.get('user')) {
+                send = send.bold();
+            }
+
+            $('#chatscreen').append(send);
+            $('#chatscreen').append("<br />");
+            $("#chatscreen").animate({ scrollTop: 20000000 }, "slow");	
+        }
+
+        function prettytimestamp(time) {
+            var date = new Date(parseInt(time));
+            return date.toLocaleTimeString(navigator.language, {
+            hour: '2-digit',
+            minute:'2-digit'
+            });
+        }
+
+        function checkcolour(testcolour) {
+           var hash = '#';
+           colour = hash.concat( testcolour);
+           var test = /^#[0-9A-F]{6}$/i.test(colour);
+           return test;
+        }
+    });
+
+    </script>
+
+    <style>
+		html, body {
+            margin: 0;
+            border: 0;
+            padding: 0;
+            height: 100%;
+            width: 100%;
+            font-family: 'Chivo', sans-serif;
+            background-image: linear-gradient(to top, #E6E6FA 0%, #e3eeff 99%, #e3eeff 100%);
+            color: black;
+        }
+
+        .homepage{
+            position: relative;
+            height: 100%;
+        }
+
+        header{
+            height: 75px;
+            margin-bottom: 15px;
+            margin-top: 0px;
+            padding-top: 0px;
+            border-top: 0px;
+        }
+
+        #title{
+            font-size: 30px;
+            text-align: center;
+            margin: 10px;
+        }
+        
+        #usernametitle{
+            left: 1.5%;
+            margin: 0;
+            font-size: 25px;
+            width: 70%;
+            position: absolute;
+        }
+
+        #onlinetitle{
+            width: 25%;
+            margin: 0px;
+            font-size: 25px;
+            right: 1%;
+            position: absolute;
+        }
+
+        section{
+            position: absolute;
+            left: 1.5%;
+            margin-right: 1%;
+            margin-bottom: 1%;
+            width: 70%;
+            height: 85%;
+            display: flex;
+            flex-direction: column;
+        }
+
+        aside{
+            margin-bottom: 1%;
+            right: 1.5%;
+            position: absolute;
+            height: 50%;
+            width: 25%;
+            display: flex;
+            flex-direction: column;
+        }
+
+        #onlineuserslist{
+            margin-top: 0px;
+            padding-top: 0px;
+            border-top: 0px;
+            border-radius: 5px;
+            padding: 10px;
+            height: 100%;
+            flex: 1;
+            list-style-type: circle;
+            overflow-y: scroll;
+            scrollbar-3dlight-color: white;
+            scrollbar-width: auto;
+            background-color: black;
+            font-size: 25px;
+            vertical-align: top;
+            color: white;
+            opacity: 0.5;
+        }
+
+        #chatscreen{
+            border-radius: 5px;
+            padding: 5px;
+            flex: 1;
+            height: 90%;
+            width: 100%;
+            list-style-type: none;
+            overflow-y: scroll;
+            scrollbar-3dlight-color: white;
+            scrollbar-width: auto;
+            background-color: black;
+            font-size: 20px;
+            color: white;
+            opacity: 0.5;  
+        }
+
+        #form{
+            width: 100%;
+            height: 4%;
+        }
+
+        #chatbox{
+            border-radius: 15px;
+            padding: 3px;
+            width: 100%;
+            height: 100%;
+            background-color: black;
+            opacity: 0.75;
+            color: white;
+        }
+
+        #chatbox::placeholder {
+            font-size: 110%;
+            color: rgb(221, 221, 221);
+            opacity: 0.5;
+        }
+
+        #snackbar{
+            border-radius: 5px;
+            visibility: hidden;
+            min-width: 250px;
+            margin-left: -125px;
+            background-color: #333;
+            color: #fff;
+            text-align: center;
+            border-radius: 2px;
+            padding: 16px;
+            position: fixed;
+            z-index: 1;
+            left: 50%;
+            bottom: 30px;
+            font-size: 17px;
+        }
+
+        #snackbar.show{
+            visibility: visible;
+            -webkit-animation: fadein 0.5s, fadeout 0.5s 2.5s;
+            animation: fadein 0.5s, fadeout 0.5s 2.5s;
+        }
+
+        @-webkit-keyframes fadein {
+            from {bottom: 0; opacity: 0;} 
+            to {bottom: 30px; opacity: 1;}
+        }
+
+        @keyframes fadein {
+            from {bottom: 0; opacity: 0;}
+            to {bottom: 30px; opacity: 1;}
+        }
+
+        @-webkit-keyframes fadeout {
+            from {bottom: 30px; opacity: 1;} 
+            to {bottom: 0; opacity: 0;}
+        }
+
+        @keyframes fadeout {
+            from {bottom: 30px; opacity: 1;}
+            to {bottom: 0; opacity: 0;}
+        }
+
+    </style>
+
+</head>
+<body>
+    <div class=homepage>
+        <header>
+            <h1 id="title">ONLINE CHATROOM <br /></h1>
+            <h1 id="usernametitle"></h1>
+            <h2 id="onlinetitle">Online Users</h2>
+        </header>
+        <div class=content>
+            <section>
+                <div id="chatscreen"></div>
+                <form id="form">
+                    <input id="chatbox" autocomplete="off" type="text" placeholder="Type to chat...">
+                </form>
+            </section>
+            <aside>
+                <ul id="onlineuserslist"></ul>
+            </aside>
+        </div>
+        <div id="snackbar"></div>
+    </div>
+</body>
+</html>
