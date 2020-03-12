@@ -44,6 +44,9 @@
             if (message.charAt(0) === '/'){
                 command(message);
             }
+            else if (message.length > 200){
+                showerror("Sorry, each message is limited to 200 characters.");
+            }
             else {
                 $('#chatbox').val('');
                 socket.emit('send', Cookies.get('user'), message);
